@@ -49,6 +49,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import app.birthbaby.alerts.AlarmPlayer
+import app.birthbaby.alerts.AlertDecisions
 import app.birthbaby.alerts.Notifier
 import app.birthbaby.core.Advice
 import app.birthbaby.core.LabourRules
@@ -74,7 +75,7 @@ fun PartnerHome(state: HomeState, onSettings: () -> Unit, onDiagnostics: () -> U
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            state.alerts.filter { it.ackedMs == null && it.byRole == Role.MOTHER }.forEach { alert ->
+            state.alerts.filter { it.ackedMs == null && AlertDecisions.ringsPartner(it) }.forEach { alert ->
                 InfoCard(alert.type.title, alert.type.partnerMessage.withNames(s.motherName, s.partnerName), tones.urgent) {
                     UrgentButton("On my way", {
                         AlarmPlayer.stop()

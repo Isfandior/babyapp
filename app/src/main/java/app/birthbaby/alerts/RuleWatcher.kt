@@ -6,7 +6,6 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.telephony.SmsManager
 import androidx.core.content.ContextCompat
-import app.birthbaby.core.Advice
 import app.birthbaby.core.AlertType
 import app.birthbaby.core.Contraction
 import app.birthbaby.core.LabourRules
@@ -16,9 +15,6 @@ import app.birthbaby.data.FamilySettings
 import app.birthbaby.data.Repo
 import app.birthbaby.data.Role
 import app.birthbaby.data.Trace
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 /** Turns the NHS rules into alerts. Whichever phone logged the contraction raises it. */
 object RuleWatcher {
@@ -31,13 +27,9 @@ object RuleWatcher {
         alerts: List<Alert>,
     ) {
         val assessment = LabourRules.assess(contractions, System.currentTimeMillis(), settings.callRule)
-        val type = when (assessment.advice) {
-            Advice.CALL_NOW -> AlertType.CALL_NOW
-            Advice.CALL_FOR_ADVICE -> AlertType.TIME_TO_CALL
-            Advice.NONE -> return
-        }
+        val type = AlertDecisions.ruleAlertType(assessment.advice) ?: return
         // One alert of each kind per day, so every new contraction doesn't ring again.
-        val id = "${type.name}-${SimpleDateFormat("yyyyMMdd", Locale.UK).format(Date())}"
+        val id = AlertDecisions.ruleAlertId(type, System.currentTimeMillis())
         if (alerts.any { it.id == id }) return
         Trace.critical("rule_triggered", "${type.name}: ${assessment.reason}")
         raise(context, fid, role, type, settings, id)
