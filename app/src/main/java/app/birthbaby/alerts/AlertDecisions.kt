@@ -23,9 +23,16 @@ object AlertDecisions {
         return "${type.name}-$day"
     }
 
+    /**
+     * Alerts that ring the partner: anything from the mother's phone, and the contraction
+     * rule alerts whichever phone raised them (both phones check the rules).
+     */
+    fun ringsPartner(alert: Alert): Boolean =
+        alert.byRole == Role.MOTHER || alert.type == AlertType.TIME_TO_CALL || alert.type == AlertType.CALL_NOW
+
     /** Alerts the partner's phone should start ringing for now. */
     fun toRing(alerts: List<Alert>, rung: Set<String>): List<Alert> =
-        alerts.filter { it.ackedMs == null && it.byRole == Role.MOTHER && it.id !in rung }
+        alerts.filter { it.ackedMs == null && ringsPartner(it) && it.id !in rung }
 
     /** False once every alert this phone rang has been acknowledged, so the alarm can stop. */
     fun stillRinging(alerts: List<Alert>, rung: Set<String>): Boolean =

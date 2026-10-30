@@ -64,13 +64,17 @@ class AlertDecisionsTest {
     }
 
     /**
-     * Known bug. Both phones run the contraction rules, and both write the same "Time to call"
-     * alert. If the partner's phone writes last, the alert is marked as raised by the partner,
-     * and the partner's phone never rings for it. Expected: a rule alert rings the partner
-     * whichever phone raised it.
+     * Both phones check the contraction rules and write the same "Time to call" alert. If the
+     * partner's phone writes last, the alert is marked as the partner's; it must still ring him.
      */
-    @Test fun knownBug_ruleAlertRingsThePartnerWhicheverPhoneRaisedIt() {
+    @Test fun ruleAlertRingsThePartnerWhicheverPhoneRaisedIt() {
         val raisedByPartnersPhone = alert("TIME_TO_CALL-20261230", AlertType.TIME_TO_CALL, by = Role.PARTNER)
-        assertEquals(1, AlertDecisions.toRing(listOf(raisedByPartnersPhone), rung = emptySet()).size)
+        val callNow = alert("CALL_NOW-20261230", AlertType.CALL_NOW, by = Role.PARTNER)
+        assertEquals(2, AlertDecisions.toRing(listOf(raisedByPartnersPhone, callNow), rung = emptySet()).size)
+    }
+
+    @Test fun onlyRuleAlertsFromThePartnersPhoneRingIt() {
+        assertFalse(AlertDecisions.ringsPartner(alert("t", AlertType.TEST, by = Role.PARTNER)))
+        assertTrue(AlertDecisions.ringsPartner(alert("w", AlertType.WATERS, by = Role.MOTHER)))
     }
 }

@@ -43,10 +43,31 @@ object LabourRules {
     const val LONG_CONTRACTION_MS = 2 * 60_000L
     const val FREQUENT_WINDOW_MS = 10 * 60_000L
     const val FREQUENT_COUNT = 6
+    /** Starts this close together are the same contraction, tapped on both phones. */
+    const val SAME_CONTRACTION_MS = 20_000L
+    /** How far ahead the other phone's clock may be. */
+    const val CLOCK_SKEW_MS = 60_000L
     private const val HOUR_MS = 60 * 60_000L
 
+    /**
+     * Collapses copies of the same contraction logged on both phones into one. If either
+     * copy was ended, the contraction is ended, so a copy nobody ended doesn't keep running.
+     */
+    fun merged(contractions: List<Contraction>): List<Contraction> {
+        val groups = mutableListOf<MutableList<Contraction>>()
+        contractions.sortedBy { it.startMs }.forEach { c ->
+            val group = groups.lastOrNull()
+            if (group != null && c.startMs - group.first().startMs <= SAME_CONTRACTION_MS) group += c else groups += mutableListOf(c)
+        }
+        return groups.map { group ->
+            val ended = group.filter { !it.isOngoing }
+            if (ended.isEmpty()) group.last().copy(startMs = group.first().startMs)
+            else ended.first().copy(startMs = group.first().startMs, endMs = ended.maxOf { it.endMs!! })
+        }
+    }
+
     fun stats(contractions: List<Contraction>, nowMs: Long): Stats {
-        val recent = contractions.filter { nowMs - it.startMs <= HOUR_MS }.sortedBy { it.startMs }
+        val recent = merged(contractions).filter { nowMs - it.startMs <= HOUR_MS }.sortedBy { it.startMs }
         val done = recent.filter { !it.isOngoing }
         val avgDuration = done.takeIf { it.isNotEmpty() }
             ?.map { it.durationMs(nowMs) }?.average()?.div(1000)?.roundToInt()
@@ -56,14 +77,14 @@ object LabourRules {
     }
 
     fun assess(contractions: List<Contraction>, nowMs: Long, rule: CallRule = CallRule()): Assessment {
-        val sorted = contractions.sortedBy { it.startMs }
+        val sorted = merged(contractions)
         val stats = stats(sorted, nowMs)
 
         sorted.lastOrNull { it.durationMs(nowMs) > LONG_CONTRACTION_MS }
             ?.takeIf { nowMs - it.startMs <= HOUR_MS }
             ?.let { return Assessment(Advice.CALL_NOW, "A contraction lasted longer than 2 minutes", stats) }
 
-        val inWindow = sorted.count { nowMs - it.startMs in 0..FREQUENT_WINDOW_MS }
+        val inWindow = sorted.count { nowMs - it.startMs in -CLOCK_SKEW_MS..FREQUENT_WINDOW_MS }
         if (inWindow >= FREQUENT_COUNT) {
             return Assessment(Advice.CALL_NOW, "$inWindow contractions in the last 10 minutes", stats)
         }

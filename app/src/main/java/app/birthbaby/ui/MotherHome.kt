@@ -66,7 +66,7 @@ data class HomeState(
     val now: Long,
 ) {
     val settings get() = family.settings
-    val ongoing: Contraction? get() = contractions.firstOrNull { it.isOngoing }
+    val ongoing: Contraction? get() = LabourRules.merged(contractions).lastOrNull { it.isOngoing }
     val assessment get() = LabourRules.assess(contractions, now, settings.callRule)
 
     /** The mother's most recent urgent alert, while it's still worth showing (one hour). */

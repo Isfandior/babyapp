@@ -111,10 +111,10 @@ class LabourRulesEdgeCasesTest {
         assertEquals("6 min", LabourRules.formatSec(360))
     }
 
-    // Known bugs. These fail today and show what should happen.
+    // Both phones logging, and clocks that disagree.
 
     /** Both phones tap "Contraction started" for the same contraction, a couple of seconds apart. */
-    @Test fun knownBug_sameContractionLoggedOnBothPhonesCountsOnce() {
+    @Test fun sameContractionLoggedOnBothPhonesCountsOnce() {
         val real = at(7.0, 4.0, 1.0, lengthSec = 45)
         val partnerCopies = real.map { it.copy(id = it.id + "-p", startMs = it.startMs + 2 * sec, endMs = it.endMs!! + 1 * sec) }
         // Three real contractions three minutes apart: not yet time to call (four are needed).
@@ -123,15 +123,35 @@ class LabourRulesEdgeCasesTest {
     }
 
     /** One phone ended the contraction; the other phone's copy was never ended. */
-    @Test fun knownBug_unendedDuplicateDoesNotLookLikeALongContraction() {
+    @Test fun unendedDuplicateDoesNotLookLikeALongContraction() {
         val ended = Contraction("m", now - 3 * min, now - 3 * min + 45 * sec)
         val dangling = Contraction("p", now - 3 * min + 2 * sec, null)
         assertEquals(Advice.NONE, advice(listOf(ended, dangling)), "a forgotten duplicate looked like a 3-minute contraction")
     }
 
     /** The other phone's clock is a few seconds ahead, so its newest contraction starts "in the future". */
-    @Test fun knownBug_smallClockDifferenceDoesNotHideAContraction() {
+    @Test fun smallClockDifferenceDoesNotHideAContraction() {
         val list = at(8.0, 6.5, 5.0, 3.5, 2.0, lengthSec = 40) + Contraction("skewed", now + 3 * sec, null)
         assertEquals(Advice.CALL_NOW, advice(list), "6 in 10 minutes was missed because one phone's clock is 3 seconds ahead")
+    }
+
+    @Test fun bothPhonesStillTimingShowsOneContractionFromTheFirstTap() {
+        val list = listOf(Contraction("m", now - 30 * sec, null), Contraction("p", now - 28 * sec, null))
+        val merged = LabourRules.merged(list)
+        assertEquals(1, merged.size)
+        assertEquals(now - 30 * sec, merged.single().startMs)
+        assertEquals(null, merged.single().endMs)
+    }
+
+    @Test fun separateContractionsAreNotMerged() {
+        assertEquals(4, LabourRules.merged(at(16.0, 11.0, 6.0, 1.0)).size)
+        assertEquals(6, LabourRules.merged(at(10.0, 8.0, 6.0, 4.0, 2.0, 0.0, lengthSec = 0)).size)
+    }
+
+    @Test fun statsCountACopiedContractionOnce() {
+        val real = at(13.0, 7.0, 1.0, lengthSec = 45)
+        val copies = real.map { it.copy(id = it.id + "-p", startMs = it.startMs + 3 * sec) }
+        assertEquals(3, LabourRules.stats(real + copies, now).countLastHour)
+        assertEquals(360, LabourRules.stats(real + copies, now).avgGapSec)
     }
 }

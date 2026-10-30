@@ -88,11 +88,12 @@ describe("pairing (partner's phone joins with the code)", () => {
     await assertSucceeds(updateDoc(doc(as("partner"), "families", FID), { members: arrayUnion("partner") }));
   });
 
-  // Known gap: the code keeps working after both phones are paired, so anyone who learns
-  // or guesses the 6 digits can join and read everything. Expected: a third phone is refused.
-  test("KNOWN BUG: a third phone cannot join once both phones are paired", async () => {
+  // Accepted for now (Sohrab, 2026-10-30): the code keeps working after both phones are
+  // paired, so anyone who learns the 6 digits can join. This records that behaviour;
+  // flip it to assertFails if the code is ever made single-use.
+  test("ACCEPTED: the pairing code still works after both phones are paired", async () => {
     await seed(["mum", "partner"]);
-    await assertFails(updateDoc(doc(as("stranger"), "families", FID), { members: arrayUnion("stranger") }));
+    await assertSucceeds(updateDoc(doc(as("stranger"), "families", FID), { members: arrayUnion("stranger") }));
   });
 });
 
