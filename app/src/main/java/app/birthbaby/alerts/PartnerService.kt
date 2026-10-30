@@ -86,7 +86,7 @@ class PartnerService : Service() {
     private fun onAlerts(fid: String, prefs: Prefs, alerts: List<Alert>) {
         lastAlerts = alerts
         val rung = prefs.rung()
-        alerts.filter { it.ackedMs == null && it.byRole == Role.MOTHER && it.id !in rung }.forEach { alert ->
+        AlertDecisions.toRing(alerts, rung).forEach { alert ->
             prefs.markRung(alert.id)
             Trace.critical("alert_received", "${alert.type.name} ${alert.id} after ${System.currentTimeMillis() - alert.createdMs}ms")
             Repo.markRinging(fid, alert.id)
@@ -94,7 +94,7 @@ class PartnerService : Service() {
             Notifier.urgent(this, alert.id, alert.type.title, message)
             AlarmPlayer.start(this)
         }
-        val stillRinging = alerts.any { it.ackedMs == null && it.id in prefs.rung() }
+        val stillRinging = AlertDecisions.stillRinging(alerts, prefs.rung())
         if (!stillRinging && AlarmPlayer.isPlaying) {
             AlarmPlayer.stop()
             alerts.forEach { Notifier.cancel(this, it.id) }
