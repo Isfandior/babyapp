@@ -43,7 +43,7 @@ jobs:
           fi
 
       - name: Test NHS rules and alert decisions
-        run: ./gradlew :core:test :app:testReleaseUnitTest
+        run: ./gradlew --continue :core:test :app:testReleaseUnitTest
 
       - uses: actions/upload-artifact@v4
         if: always()
