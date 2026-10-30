@@ -187,25 +187,6 @@ private fun SetupCard() {
                 )
             }
         }
-        // Samsung's sleeping-apps list can't be checked from the app, so it's always shown here.
-        Row(
-            Modifier.fillMaxWidth()
-                .clickable {
-                    context.startActivity(
-                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                    )
-                }
-                .padding(vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("○", style = MaterialTheme.typography.titleMedium, modifier = Modifier.width(32.dp))
-            Text(
-                "Samsung: Battery > Background usage limits > add Birth & Baby to Never sleeping apps",
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.weight(1f),
-            )
-        }
     }
 }
 
@@ -224,7 +205,7 @@ private fun setupSteps(context: Context): List<SetupStep> = buildList {
     }
     add(SetupStep("Allow Do Not Disturb access", nm.isNotificationPolicyAccessGranted, Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)))
     add(SetupStep(
-        "Let urgent alerts override Do Not Disturb",
+        "Let urgent alerts override Do Not Disturb (switch on \"Override\" or \"Ignore Do Not Disturb\")",
         nm.getNotificationChannel(Notifier.URGENT)?.canBypassDnd() != false,
         Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
             .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
@@ -233,7 +214,7 @@ private fun setupSteps(context: Context): List<SetupStep> = buildList {
     val pm = context.getSystemService(PowerManager::class.java)
     @Suppress("BatteryLife")
     add(SetupStep(
-        "Stop battery saving from pausing the app",
+        "Set battery to Unrestricted so Samsung never puts the app to sleep",
         pm.isIgnoringBatteryOptimizations(context.packageName),
         Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, pkg),
     ))
