@@ -1,0 +1,8 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+.DS_Store
+# Firebase config is per-project; CI writes it from the GOOGLE_SERVICES_JSON secret
+app/google-services.json
