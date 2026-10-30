@@ -204,9 +204,12 @@ private fun setupSteps(context: Context): List<SetupStep> = buildList {
         add(SetupStep("Allow full-screen alerts", nm.canUseFullScreenIntent(), Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, pkg)))
     }
     add(SetupStep("Allow Do Not Disturb access", nm.isNotificationPolicyAccessGranted, Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)))
+    // Urgent alerts play on the alarm sound, so Do Not Disturb that lets alarms through is enough.
+    // Samsung allows alarms by default; the channel override is only needed if alarms are blocked.
+    val alarmsAllowed = (nm.notificationPolicy.priorityCategories and NotificationManager.Policy.PRIORITY_CATEGORY_ALARMS) != 0
     add(SetupStep(
-        "Let urgent alerts override Do Not Disturb (switch on \"Override\" or \"Ignore Do Not Disturb\")",
-        nm.getNotificationChannel(Notifier.URGENT)?.canBypassDnd() != false,
+        "Let urgent alerts ring during Do Not Disturb (allow Alarms, or switch on \"Override Do Not Disturb\")",
+        alarmsAllowed || nm.getNotificationChannel(Notifier.URGENT)?.canBypassDnd() != false,
         Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
             .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
             .putExtra(Settings.EXTRA_CHANNEL_ID, Notifier.URGENT),
