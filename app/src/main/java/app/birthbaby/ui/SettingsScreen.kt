@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -44,23 +45,37 @@ fun SettingsScreen(family: Family, onDone: () -> Unit) {
             modifier = Modifier.fillMaxWidth(),
         )
 
+    // The text is kept separately so the field can be empty while typing a new number.
+    // An empty field keeps the last number; the rule itself is clamped to sensible limits.
     @Composable
-    fun number(label: String, value: Int, update: (Int) -> FamilySettings) =
+    fun number(label: String, value: Int, update: (Int) -> FamilySettings) {
+        var text by remember { mutableStateOf(value.toString()) }
         OutlinedTextField(
-            value = value.toString(),
-            onValueChange = { v -> v.filter(Char::isDigit).toIntOrNull()?.let { s = update(it) } },
+            value = text,
+            onValueChange = { v ->
+                text = v.filter(Char::isDigit).take(2)
+                text.toIntOrNull()?.let { s = update(it) }
+            },
             label = { Text(label) },
+            isError = text.isEmpty(),
+            supportingText = { if (text.isEmpty()) Text("Enter a number") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth(),
         )
+    }
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text("Settings", fontSize = 28.sp)
+        Text("Settings", style = MaterialTheme.typography.headlineMedium)
+        Text(
+            "Pairing code: ${family.code.chunked(3).joinToString(" ")}. Use it if a phone needs setting up again.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
 
-        Text("People", fontSize = 18.sp)
+        SectionHeading("People")
         field("Mother's name", s.motherName) { s.copy(motherName = it) }
         field("Mother's mobile", s.motherPhone, phone = true) { s.copy(motherPhone = it) }
         field("Partner's name", s.partnerName) { s.copy(partnerName = it) }
@@ -68,7 +83,7 @@ fun SettingsScreen(family: Family, onDone: () -> Unit) {
         field("Backup person's name", s.backupName) { s.copy(backupName = it) }
         field("Backup person's mobile", s.backupPhone, phone = true) { s.copy(backupPhone = it) }
 
-        Text("Hospital", fontSize = 18.sp)
+        SectionHeading("Hospital")
         field("Due date (YYYY-MM-DD)", s.dueDate) { s.copy(dueDate = it) }
         field("Hospital", s.hospital) { s.copy(hospital = it) }
         field("Delivery Suite (24 hours)", s.deliverySuite, phone = true) { s.copy(deliverySuite = it) }
@@ -78,21 +93,21 @@ fun SettingsScreen(family: Family, onDone: () -> Unit) {
         field("Community midwives", s.communityMidwife, phone = true) { s.copy(communityMidwife = it) }
         field("Details for staff (hospital number, NHS number, allergies, birth plan)", s.motherDetails) { s.copy(motherDetails = it) }
 
-        Text("When to call", fontSize = 18.sp)
+        SectionHeading("When to call")
         Text(
             "NHS default: regular contractions every 5 minutes or more often. Change this to what your midwife says. " +
                 "The urgent rules (waters, bleeding, movements, contractions over 2 minutes or 6 in 10 minutes) always stay on.",
-            fontSize = 14.sp,
+            style = MaterialTheme.typography.bodyMedium,
         )
         number("Call when contractions are this many minutes apart or less", s.maxGapMinutes) { s.copy(maxGapMinutes = it) }
         number("…for this many contractions in a row", s.regularCount) { s.copy(regularCount = it) }
 
-        Text("Getting there", fontSize = 18.sp)
+        SectionHeading("Getting there")
         field("Home address", s.homeAddress) { s.copy(homeAddress = it) }
         field("Taxi app (Android package, e.g. com.ubercab)", s.taxiAppPackage) { s.copy(taxiAppPackage = it) }
         field("Backup minicab number", s.taxiBackupPhone, phone = true) { s.copy(taxiBackupPhone = it) }
 
-        BigButton("Save", Green, {
+        BigButton("Save", {
             Repo.saveSettings(family.id, s)
             onDone()
         })
@@ -105,9 +120,9 @@ fun SettingsScreen(family: Family, onDone: () -> Unit) {
 fun DiagnosticsScreen(family: Family, role: Role, onDone: () -> Unit) {
     val lines = remember { Trace.recent() }
     Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Diagnostics", fontSize = 28.sp)
-        Text("Version ${BuildConfig.VERSION_NAME} · ${role.name.lowercase()} phone · code ${family.code}", fontSize = 14.sp)
-        family.partnerSeenMs?.let { Text("Partner's phone last checked in at ${time(it)}", fontSize = 14.sp) }
+        Text("Diagnostics", style = MaterialTheme.typography.headlineMedium)
+        Text("Version ${BuildConfig.VERSION_NAME} · ${role.name.lowercase()} phone · code ${family.code}", style = MaterialTheme.typography.bodyMedium)
+        family.partnerSeenMs?.let { Text("Partner's phone last checked in at ${time(it)}", style = MaterialTheme.typography.bodyMedium) }
         TextButton(onClick = onDone) { Text("Back") }
         LazyColumn(Modifier.fillMaxWidth()) {
             items(lines) { Text(it, fontSize = 12.sp, modifier = Modifier.padding(vertical = 2.dp)) }

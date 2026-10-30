@@ -85,6 +85,7 @@ object Repo {
                         code = it.getString("code") ?: "",
                         settings = FamilySettings.fromMap(it.get("settings") as? Map<*, *>),
                         partnerSeenMs = it.getLong("partnerSeenMs"),
+                        memberCount = (it.get("members") as? List<*>)?.size ?: 1,
                     )
                 },
             )
@@ -126,6 +127,17 @@ object Repo {
     fun deleteContraction(fid: String, id: String) {
         family(fid).collection("contractions").document(id).delete()
         Trace.event("contraction_deleted", id)
+    }
+
+    /** Puts back a contraction removed by mistake, under the same id. */
+    fun restoreContraction(fid: String, c: Contraction) {
+        val data = buildMap<String, Any> {
+            put("startMs", c.startMs)
+            c.endMs?.let { put("endMs", it) }
+            put("by", Role.PARTNER.name)
+        }
+        family(fid).collection("contractions").document(c.id).set(data)
+        Trace.event("contraction_restored", c.id)
     }
 
     fun alertsFlow(fid: String, sinceMs: Long): Flow<List<Alert>> = callbackFlow {

@@ -3,11 +3,21 @@ package app.birthbaby.ui
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextAlign
+import app.birthbaby.data.FamilySettings
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -26,7 +36,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import app.birthbaby.alerts.PartnerService
 import app.birthbaby.data.Prefs
 import app.birthbaby.data.Repo
@@ -38,9 +47,12 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         setContent {
-            MaterialTheme {
-                Surface(Modifier.fillMaxSize()) { App() }
+            BirthBabyTheme {
+                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                    Box(Modifier.safeDrawingPadding()) { App() }
+                }
             }
         }
     }
@@ -81,7 +93,7 @@ fun App() {
 
     val fam = family
     if (fam == null) {
-        Column(Modifier.padding(24.dp)) { Text("Connecting…", fontSize = 20.sp) }
+        Connecting()
         return
     }
     val state = HomeState(fam, contractions, alerts, now)
@@ -99,6 +111,31 @@ fun App() {
     }
 }
 
+/** Shown until the family loads. Never a dead end: the Delivery Suite is always one tap away. */
+@Composable
+private fun Connecting() {
+    val context = LocalContext.current
+    var slow by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { delay(10_000); slow = true }
+    Column(
+        Modifier.fillMaxSize().padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        CircularProgressIndicator()
+        Text("Connecting…", style = MaterialTheme.typography.titleLarge)
+        if (slow) {
+            Text(
+                "Still connecting. Check Wi-Fi or mobile data.",
+                style = MaterialTheme.typography.bodyLarge,
+                textAlign = TextAlign.Center,
+            )
+            val defaults = FamilySettings()
+            QuietButton("Call Delivery Suite", { dial(context, defaults.deliverySuite, "delivery_suite") }, MaterialTheme.colorScheme.error)
+        }
+    }
+}
+
 @Composable
 fun Onboarding(onPaired: (Role, String) -> Unit) {
     val scope = rememberCoroutineScope()
@@ -109,29 +146,40 @@ fun Onboarding(onPaired: (Role, String) -> Unit) {
     var created by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text("Birth & Baby", fontSize = 32.sp)
+        Text("Birth & Baby", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(top = 32.dp))
         val c = created
         when {
             c != null -> {
-                Text("Give this code to your partner:", fontSize = 18.sp)
-                Text(c.second, fontSize = 48.sp)
-                BigButton("Done", Green, { onPaired(Role.MOTHER, c.first) })
+                val joined by remember(c.first) { Repo.familyFlow(c.first) }.collectAsState(null)
+                Text("On the partner's phone, choose \"I'm the partner\" and enter this code:", style = MaterialTheme.typography.bodyLarge)
+                Text(c.second.chunked(3).joinToString(" "), style = MaterialTheme.typography.displayLarge)
+                if ((joined?.memberCount ?: 1) >= 2) {
+                    InfoCard("Partner's phone has joined ✓", "", tones.ok)
+                    BigButton("Done", { onPaired(Role.MOTHER, c.first) })
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                        Text("Waiting for the partner's phone…", style = MaterialTheme.typography.bodyLarge)
+                    }
+                    QuietButton("Skip for now", { onPaired(Role.MOTHER, c.first) })
+                }
             }
             joining -> {
                 OutlinedTextField(
                     value = code,
                     onValueChange = { code = it.filter(Char::isDigit).take(6) },
-                    label = { Text("6-digit code from the mother's phone") },
+                    label = { Text("6-digit code from the other phone") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    textStyle = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                BigButton(if (busy) "Joining…" else "Join", Green, {
+                BigButton(if (busy) "Joining…" else "Join", {
                     if (busy) return@BigButton
                     busy = true
                     scope.launch {
                         try {
                             val fid = Repo.joinFamily(code)
-                            if (fid == null) error = "That code didn't match. Check it on the mother's phone."
+                            if (fid == null) error = "That code didn't match. Check it on the other phone."
                             else onPaired(Role.PARTNER, fid)
                         } catch (e: Exception) {
                             Trace.error("join_failed", e)
@@ -140,10 +188,11 @@ fun Onboarding(onPaired: (Role, String) -> Unit) {
                         busy = false
                     }
                 })
+                TextButton(onClick = { joining = false }) { Text("Back") }
             }
             else -> {
-                Text("Whose phone is this?", fontSize = 20.sp)
-                BigButton(if (busy) "Setting up…" else "Mother", Red, {
+                Text("Whose phone is this?", style = MaterialTheme.typography.titleLarge)
+                BigButton(if (busy) "Setting up…" else "I'm having the baby", {
                     if (busy) return@BigButton
                     busy = true
                     scope.launch {
@@ -155,10 +204,15 @@ fun Onboarding(onPaired: (Role, String) -> Unit) {
                         }
                         busy = false
                     }
-                })
-                BigButton("Partner", Green, { joining = true })
+                }, height = 80)
+                BigButton("I'm the partner", { joining = true }, MaterialTheme.colorScheme.secondary, MaterialTheme.colorScheme.onSecondary, height = 80)
+                Text(
+                    "Set up the phone of the person having the baby first. It will show a code for the partner's phone.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
-        error?.let { Text(it, color = Red) }
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     }
 }

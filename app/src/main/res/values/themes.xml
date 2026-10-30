@@ -1,3 +1,9 @@
 <resources>
-    <style name="Theme.BirthBaby" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- Matches the Compose theme so there's no white flash on launch. -->
+    <style name="Theme.BirthBaby" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/background</item>
+        <item name="android:statusBarColor">@color/background</item>
+        <item name="android:navigationBarColor">@color/background</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
 </resources>
