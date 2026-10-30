@@ -75,6 +75,8 @@ data class Family(
     val code: String,
     val settings: FamilySettings,
     val partnerSeenMs: Long?,
+    /** 1 until the partner's phone joins with the code. */
+    val memberCount: Int = 1,
 )
 
 data class Alert(
