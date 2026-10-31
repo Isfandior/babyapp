@@ -25,7 +25,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -36,6 +35,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import app.birthbaby.alerts.PartnerService
 import app.birthbaby.data.Prefs
 import app.birthbaby.data.Repo
@@ -83,12 +86,19 @@ fun App() {
 
     LaunchedEffect(r) { if (r == Role.PARTNER) PartnerService.start(context) }
 
-    val family by remember(f) { Repo.familyFlow(f) }.collectAsState(null)
-    val contractions by remember(f) { Repo.contractionsFlow(f) }.collectAsState(emptyList())
+    // The screen only listens while it's visible. The partner's alarms come from PartnerService, not from here.
+    val family by remember(f) { Repo.familyFlow(f) }.collectAsStateWithLifecycle(null)
+    val contractions by remember(f) { Repo.contractionsFlow(f) }.collectAsStateWithLifecycle(emptyList())
     val alerts by remember(f) { Repo.alertsFlow(f, System.currentTimeMillis() - 12 * 60 * 60_000L) }
-        .collectAsState(emptyList())
+        .collectAsStateWithLifecycle(emptyList())
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) { while (true) { delay(1000); now = System.currentTimeMillis() } }
+    val tickMs = Ticker.intervalMs(contractions, alerts, now)
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(lifecycle, tickMs) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) { now = System.currentTimeMillis(); delay(tickMs) }
+        }
+    }
     var screen by remember { mutableStateOf(Screen.HOME) }
 
     val fam = family
@@ -150,7 +160,7 @@ fun Onboarding(onPaired: (Role, String) -> Unit) {
         val c = created
         when {
             c != null -> {
-                val joined by remember(c.first) { Repo.familyFlow(c.first) }.collectAsState(null)
+                val joined by remember(c.first) { Repo.familyFlow(c.first) }.collectAsStateWithLifecycle(null)
                 Text("On the partner's phone, choose \"I'm the partner\" and enter this code:", style = MaterialTheme.typography.bodyLarge)
                 Text(c.second.chunked(3).joinToString(" "), style = MaterialTheme.typography.displayLarge)
                 if ((joined?.memberCount ?: 1) >= 2) {
