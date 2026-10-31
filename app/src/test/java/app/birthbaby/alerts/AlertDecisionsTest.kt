@@ -77,4 +77,47 @@ class AlertDecisionsTest {
         assertFalse(AlertDecisions.ringsPartner(alert("t", AlertType.TEST, by = Role.PARTNER)))
         assertTrue(AlertDecisions.ringsPartner(alert("w", AlertType.WATERS, by = Role.MOTHER)))
     }
+
+    private fun sent(
+        type: AlertType = AlertType.WATERS,
+        created: Long = 1,
+        ringing: Long? = null,
+        acked: Long? = null,
+        cancelled: Long? = null,
+    ) = Alert("x", type, createdMs = created, byRole = Role.MOTHER, ringingMs = ringing, ackedMs = acked, cancelledMs = cancelled)
+
+    @Test fun cancelledAlertStopsRingingWithoutCountingAsAnswered() {
+        val cancelled = sent(cancelled = 5)
+        assertTrue(AlertDecisions.toRing(listOf(cancelled), rung = emptySet()).isEmpty())
+        assertFalse(AlertDecisions.stillRinging(listOf(cancelled), rung = setOf("x")))
+        assertNull(cancelled.ackedMs)
+    }
+
+    @Test fun textGoesOnlyWhenHisPhoneHasNotStartedRinging() {
+        assertTrue(AlertDecisions.needsSmsBackup(AlertType.WATERS, sent()))
+        assertFalse(AlertDecisions.needsSmsBackup(AlertType.WATERS, sent(ringing = 2)))
+        assertFalse(AlertDecisions.needsSmsBackup(AlertType.WATERS, sent(acked = 2)))
+        assertFalse(AlertDecisions.needsSmsBackup(AlertType.WATERS, sent(cancelled = 2)))
+    }
+
+    @Test fun textGoesIfTheAlertCannotBeReadBack() {
+        assertTrue(AlertDecisions.needsSmsBackup(AlertType.BLEEDING, null))
+    }
+
+    @Test fun testAlarmNeverTexts() {
+        assertFalse(AlertDecisions.needsSmsBackup(AlertType.TEST, sent(AlertType.TEST)))
+        assertFalse(AlertDecisions.needsSmsBackup(AlertType.TEST, null))
+    }
+
+    @Test fun secondTapOfTheSameButtonWithinTwoMinutesIsIgnored() {
+        val first = sent(AlertType.WATERS, created = 1_000)
+        assertEquals(first, AlertDecisions.recentSame(listOf(first), AlertType.WATERS, 1_000 + 60_000))
+        assertNull(AlertDecisions.recentSame(listOf(first), AlertType.WATERS, 1_000 + AlertDecisions.REPEAT_TAP_MS))
+        assertNull(AlertDecisions.recentSame(listOf(first), AlertType.BLEEDING, 1_000 + 60_000))
+    }
+
+    @Test fun aCancelledAlertDoesNotBlockSendingAgain() {
+        val cancelled = sent(AlertType.WATERS, created = 1_000, cancelled = 2_000)
+        assertNull(AlertDecisions.recentSame(listOf(cancelled), AlertType.WATERS, 3_000))
+    }
 }

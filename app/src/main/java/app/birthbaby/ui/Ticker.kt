@@ -15,7 +15,7 @@ object Ticker {
 
     fun intervalMs(contractions: List<Contraction>, alerts: List<Alert>, nowMs: Long): Long {
         val timing = LabourRules.merged(contractions).any { it.isOngoing }
-        val waiting = alerts.any { it.ackedMs == null && nowMs - it.createdMs < 60 * 60_000L }
+        val waiting = alerts.any { !it.resolved && nowMs - it.createdMs < 60 * 60_000L }
         return if (timing || waiting) FAST_MS else SLOW_MS
     }
 }

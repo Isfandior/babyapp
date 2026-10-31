@@ -75,7 +75,7 @@ fun PartnerHome(state: HomeState, onSettings: () -> Unit, onDiagnostics: () -> U
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            state.alerts.filter { it.ackedMs == null && AlertDecisions.ringsPartner(it) }.forEach { alert ->
+            state.alerts.filter { !it.resolved && AlertDecisions.ringsPartner(it) }.forEach { alert ->
                 InfoCard(alert.type.title, alert.type.partnerMessage.withNames(s.motherName, s.partnerName), tones.urgent) {
                     UrgentButton("On my way", {
                         AlarmPlayer.stop()
