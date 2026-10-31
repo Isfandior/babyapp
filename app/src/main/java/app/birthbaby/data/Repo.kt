@@ -37,7 +37,7 @@ class Prefs(context: Context) {
  *   codes/{code}                      -> { familyId }
  *   families/{id}                     -> { code, members[], settings{}, partnerSeenMs }
  *   families/{id}/contractions/{id}   -> { startMs, endMs, by }
- *   families/{id}/alerts/{id}         -> { type, createdMs, by, ringingMs, ackedMs }
+ *   families/{id}/alerts/{id}         -> { type, createdMs, by, ringingMs, ackedMs, cancelledMs, smsSentMs }
  *   families/{id}/trace/{id}          -> { ts, role, event, detail }
  * Firestore keeps an offline cache, so logging works with no signal and syncs later.
  */
@@ -157,6 +157,8 @@ object Repo {
                             byRole = d.getString("by")?.let { Role.valueOf(it) } ?: Role.MOTHER,
                             ringingMs = d.getLong("ringingMs"),
                             ackedMs = d.getLong("ackedMs"),
+                            cancelledMs = d.getLong("cancelledMs"),
+                            smsSentMs = d.getLong("smsSentMs"),
                         )
                     },
                 )
@@ -183,6 +185,31 @@ object Repo {
     fun ackAlert(fid: String, alertId: String) {
         family(fid).collection("alerts").document(alertId).update("ackedMs", System.currentTimeMillis())
         Trace.critical("alert_acked", alertId)
+    }
+
+    fun cancelAlert(fid: String, alertId: String) {
+        family(fid).collection("alerts").document(alertId).update("cancelledMs", System.currentTimeMillis())
+        Trace.critical("alert_cancelled_by_mother", alertId)
+    }
+
+    fun markSmsSent(fid: String, alertId: String) {
+        family(fid).collection("alerts").document(alertId).update("smsSentMs", System.currentTimeMillis())
+    }
+
+    /** One read of an alert: from the server if reachable, otherwise the phone's cache. */
+    suspend fun getAlert(fid: String, alertId: String): Alert? {
+        val d = family(fid).collection("alerts").document(alertId).get().await()
+        val type = d.getString("type")?.let { t -> AlertType.entries.find { it.name == t } } ?: return null
+        return Alert(
+            id = d.id,
+            type = type,
+            createdMs = d.getLong("createdMs") ?: 0,
+            byRole = d.getString("by")?.let { Role.valueOf(it) } ?: Role.MOTHER,
+            ringingMs = d.getLong("ringingMs"),
+            ackedMs = d.getLong("ackedMs"),
+            cancelledMs = d.getLong("cancelledMs"),
+            smsSentMs = d.getLong("smsSentMs"),
+        )
     }
 
     fun saveSettings(fid: String, settings: FamilySettings) {

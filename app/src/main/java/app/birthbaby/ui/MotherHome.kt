@@ -3,6 +3,13 @@ package app.birthbaby.ui
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import android.media.RingtoneManager
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import app.birthbaby.alerts.AlertDecisions
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -120,15 +127,27 @@ fun MotherHome(state: HomeState, onDiagnostics: () -> Unit) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 row.forEach { type ->
                     val urgent = type != AlertType.NEED_YOU
+                    val alreadySent = AlertDecisions.recentSame(state.alerts, type, state.now) != null
                     Button(
-                        onClick = { RuleWatcher.raise(context, fid, Role.MOTHER, type, s) },
+                        onClick = {
+                            // A second tap in a panic shouldn't ring and text him twice.
+                            if (alreadySent) Trace.event("repeat_tap_ignored", type.name)
+                            else RuleWatcher.raise(context, fid, Role.MOTHER, type, s)
+                        },
                         modifier = Modifier.weight(1f).height(72.dp),
                         shape = MaterialTheme.shapes.medium,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (urgent) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary,
                             contentColor = if (urgent) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onSecondary,
                         ),
-                    ) { Text(type.title, style = MaterialTheme.typography.labelLarge, fontSize = 18.sp, textAlign = TextAlign.Center) }
+                    ) {
+                        Text(
+                            if (alreadySent) "${type.title}\nAlready sent ✓" else type.title,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontSize = 18.sp,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
                 }
             }
         }
@@ -232,33 +251,109 @@ fun ContractionButton(state: HomeState, role: Role) {
     BigButton("Tap when it ends", { Repo.endContraction(fid, ongoing.id) }, height = 120, modifier = Modifier.alpha(pulse))
 }
 
-/** After an urgent alert: is the partner on his way, or does she need to ring him? */
+/**
+ * After an urgent alert: is the partner on his way, or does she need to ring him?
+ * Three ticks show how far it has got, and his answer arrives with a buzz and a chime.
+ */
 @Composable
 private fun LatestAlertCard(state: HomeState) {
     val context = LocalContext.current
     val s = state.settings
+    val p = s.partnerName
     val alert = state.latestMotherAlert ?: return
-    val action = alert.type.motherAction.withNames(s.motherName, s.partnerName)
-    when {
-        alert.ackedMs != null -> InfoCard("${s.partnerName} is on the way", "Tapped at ${time(alert.ackedMs)}. $action", tones.ok)
-        AlertTiming.needsCallPrompt(alert.createdMs, alert.ackedMs, state.now) ->
-            InfoCard("${s.partnerName} hasn't answered", "Call him now.", tones.warning) {
-                if (s.partnerPhone.isNotBlank()) BigButton("Call ${s.partnerName}", { dial(context, s.partnerPhone, "call_partner") })
-                if (s.backupPhone.isNotBlank()) BigButton("Call ${s.backupName.ifBlank { "backup" }}", { dial(context, s.backupPhone, "call_backup") })
+
+    if (alert.cancelledMs != null) {
+        InfoCard(
+            "Cancelled",
+            if (alert.smsSentMs != null) "$p's alarm has stopped and he's been texted that it was a mistake." else "$p's alarm has stopped.",
+        )
+        return
+    }
+
+    val acked = alert.ackedMs
+    AnsweredFeedback(acked, state.now)
+    val noAnswer = AlertTiming.needsCallPrompt(alert.createdMs, acked, state.now)
+    val callSuite = alert.type.callTarget == CallTarget.DELIVERY_SUITE &&
+        alert.type != AlertType.NEED_YOU && alert.type != AlertType.TEST
+    val tone = if (acked != null) tones.ok else tones.warning
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = tone.container, contentColor = tone.content),
+    ) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            when {
+                acked != null -> {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("✓", fontSize = 44.sp, color = MaterialTheme.colorScheme.primary)
+                        Text("$p is on his way", style = MaterialTheme.typography.headlineMedium)
+                    }
+                    Text("$p saw it at ${time(acked)} and is on his way.", style = MaterialTheme.typography.bodyLarge)
+                }
+                noAnswer -> {
+                    Text("$p hasn't answered", style = MaterialTheme.typography.headlineMedium)
+                    Text("Call him now.", style = MaterialTheme.typography.bodyLarge)
+                }
+                else -> Text("$p alerted", style = MaterialTheme.typography.headlineMedium)
             }
-        else -> InfoCard(
-            "${s.partnerName} alerted",
-            "Sent at ${time(alert.createdMs)}${if (alert.ringingMs != null) ", his phone is ringing" else ""}. $action",
-            tones.warning,
-        ) {
-            if (alert.type.callTarget == CallTarget.DELIVERY_SUITE && alert.type != AlertType.NEED_YOU && alert.type != AlertType.TEST) {
+
+            AlertProgress(sent = true, rang = alert.ringingMs != null || acked != null, answered = acked != null)
+
+            if (callSuite) {
+                Text(alert.type.motherAction.withNames(s.motherName, p), style = MaterialTheme.typography.bodyLarge)
                 UrgentButton("Call Delivery Suite", { dial(context, s.deliverySuite, "delivery_suite") })
             }
-            QuietButton("Sent by mistake", {
-                Repo.ackAlert(state.family.id, alert.id)
-                RuleWatcher.sms(context, s.partnerPhone, "Sorry, that alert was sent by mistake. All fine.")
-                Trace.critical("alert_cancelled_by_mother", alert.id)
-            }, tones.warning.content)
+            if (noAnswer) {
+                if (s.partnerPhone.isNotBlank()) BigButton("Call $p", { dial(context, s.partnerPhone, "call_partner") })
+                if (s.backupPhone.isNotBlank()) BigButton("Call ${s.backupName.ifBlank { "backup" }}", { dial(context, s.backupPhone, "call_backup") })
+            }
+            if (acked == null) {
+                QuietButton("Sent by mistake", {
+                    Repo.cancelAlert(state.family.id, alert.id)
+                    // Only say sorry by text if a text actually went out.
+                    if (alert.smsSentMs != null) RuleWatcher.sms(context, s.partnerPhone, "Sorry, that alert was sent by mistake. All fine.")
+                }, tone.content)
+            }
+        }
+    }
+}
+
+/** Sent ✓ · His phone rang ✓ · On his way ✓ */
+@Composable
+private fun AlertProgress(sent: Boolean, rang: Boolean, answered: Boolean) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf("Sent" to sent, "His phone rang" to rang, "On his way" to answered).forEach { (label, done) ->
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(if (done) "✓" else "○", style = MaterialTheme.typography.titleLarge, modifier = Modifier.alpha(if (done) 1f else 0.4f))
+                Text(
+                    label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.alpha(if (done) 1f else 0.5f),
+                )
+            }
+        }
+    }
+}
+
+/** One short buzz and a soft chime when he answers, so she knows without looking. Not again on reopening the app. */
+@Composable
+private fun AnsweredFeedback(ackedMs: Long?, now: Long) {
+    val context = LocalContext.current
+    LaunchedEffect(ackedMs) {
+        if (ackedMs == null || now - ackedMs > 30_000L) return@LaunchedEffect
+        try {
+            val vibrator = if (Build.VERSION.SDK_INT >= 31) {
+                context.getSystemService(VibratorManager::class.java).defaultVibrator
+            } else {
+                @Suppress("DEPRECATION") context.getSystemService(Vibrator::class.java)
+            }
+            vibrator.vibrate(VibrationEffect.createOneShot(400, VibrationEffect.DEFAULT_AMPLITUDE))
+            RingtoneManager.getRingtone(context, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))?.play()
+            Trace.event("answered_feedback")
+        } catch (e: Exception) {
+            Trace.error("answered_feedback_failed", e)
         }
     }
 }

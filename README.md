@@ -8,7 +8,7 @@ One Android app for two phones. Each phone picks **Mother** or **Partner** and t
 - NHS rules (`core/`, unit tested):
   - *Time to call*: regular contractions every 5 minutes or more often (editable in Settings to match the midwife's advice).
   - *Call now* (fixed, can't be switched off): any contraction over 2 minutes, or 6 or more in 10 minutes.
-- Urgent buttons: waters broke, bleeding, baby moving less, I need you. Each one rings the partner's phone, texts him as a backup, and tells the mother to call the Delivery Suite.
+- Urgent buttons: waters broke, bleeding, baby moving less, I need you. Each one rings the partner's phone, texts him only if his phone hasn't started ringing within 20 seconds, and tells the mother to call the Delivery Suite. Her screen ticks off Sent, His phone rang and On his way, with a buzz when he answers.
 - If the partner hasn't tapped **On my way** within 2 minutes, the mother's phone tells her to call him or the backup person.
 - The mother's phone warns if the partner's phone hasn't checked in for 30 minutes.
 - Settings on the partner's phone for every number, name, the call rule, taxi app and backup minicab. Defaults are Homerton's published numbers.

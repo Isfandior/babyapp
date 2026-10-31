@@ -86,4 +86,11 @@ data class Alert(
     val byRole: Role,
     val ringingMs: Long?,
     val ackedMs: Long?,
-)
+    /** Set when the mother taps "Sent by mistake". Stops the alarm without saying he's on his way. */
+    val cancelledMs: Long? = null,
+    /** Set when the backup text actually went out. */
+    val smsSentMs: Long? = null,
+) {
+    /** Answered or cancelled: nothing more should ring for it. */
+    val resolved: Boolean get() = ackedMs != null || cancelledMs != null
+}
